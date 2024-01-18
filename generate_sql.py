@@ -51,6 +51,11 @@ def load_model(model_name):
         set_proxy()
         set_openai_key(model_name)
         return None, None
+    elif "yi" in model_name.lower():
+        tokenizer = AutoTokenizer.from_pretrained(path, use_fast=False)
+        model = AutoModelForCausalLM.from_pretrained(
+            path, device_map="auto", torch_dtype='auto'
+        ).eval()
     else:
         raise NotImplementedError
     return model, tokenizer
@@ -71,15 +76,30 @@ def gpt_generate(prompt, model_name):
     except Exception as e:
         print(e)
         return ""
+
+def yi_generate(prompt, model, tokenizer):
+    messages = [{"role": "user", "content": prompt}]
+    input_ids = tokenizer.apply_chat_template( #! assure transformer version == 4.35.0
+        conversation=messages, 
+        tokenize=True,
+        add_generation_prompt=True,
+        return_tensors="pt"
+    )
+    output_ids = model.generate(input_ids.to(model.device))
+    resp = tokenizer.decode(output_ids[0][input_ids.shape[1]:],
+                            skip_special_tokens=True)
+    return resp
     
 def llm_generate(prompt, model_name, model, tokenizer):
     if model_name in ["gpt-3.5-turbo", "gpt-4"]:
-        return gpt_generate(prompt, model_name)
+        resp = gpt_generate(prompt, model_name)
     elif "chatglm" in model_name.lower() or "qwen" in model_name.lower():
         resp, _ = model.chat(tokenizer, prompt, history=[])
     elif "baichuan2" in model_name.lower():
         messages = [{"role": "user", "content": prompt}]
         resp = model.chat(tokenizer, messages)
+    elif "yi" in model_name.lower():
+        resp = yi_generate(prompt, model, tokenizer)
     else:
         raise NotImplementedError
     return resp
@@ -108,7 +128,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_name', type=str, default='chatglm3-6b',
                         choices=["chatglm3-6b", "Baichuan2-13B-Chat", "Qwen-14B-Chat",
-                                 "gpt-3.5-turbo", "gpt-4"])
+                                 "gpt-3.5-turbo", "gpt-4", "Yi-34B-Chat", "Qwen-74B-Chat"])
     args = parser.parse_args()
     model_name = args.model_name
     model, tokenizer = load_model(model_name)
