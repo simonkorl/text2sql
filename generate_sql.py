@@ -9,6 +9,9 @@ from src.llm import load_model, llm_generate
 def preprocess_sql(raw_sql):
     """get sql statement from llm output"""
     sql = raw_sql.split("【SQLQuery】")[-1].strip('\n "')
+    sql = sql.split("```sql")[-1].strip('\n `')
+    if "```" in sql:
+        sql = sql.split("```")[0].strip('\n ')
     return sql
 
 def execute_sql(sql):
