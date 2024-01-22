@@ -3,8 +3,13 @@ from tqdm import tqdm
 import argparse
 import pymysql.cursors
 from src.constant import MAX_ROUND, BASELINE_PROMPT, REFINER_PROMPT
-from src.table import TABLE_INFO
+from src.table import (
+    CORPORATE_RELOCATION_TABLE_INFO,
+    POLICY_PROJECTS_TABLE_INFO,
+    POLICY_ENTERPRISE_TABLE_INFO
+)
 from src.llm import load_model, llm_generate
+import os
     
 def preprocess_sql(raw_sql):
     """get sql statement from llm output"""
@@ -41,21 +46,21 @@ def execute_sql(sql):
                     "exception_class": str(type(e).__name__)
                 }
 
-def llm_generate_safe(question, model_name, model, tokenizer, num_round=0, args=None):
+def llm_generate_safe(question, model_name, model, tokenizer, table_info, num_round=0, args=None):
     """generate sql statement and check if it can be executed"""
     if num_round == 0:
-        prompt = BASELINE_PROMPT.format(table_info=TABLE_INFO, input=question)
+        prompt = BASELINE_PROMPT.format(table_info=table_info, input=question)
     else:
         assert args is not None
         print(f"Round {num_round}: {args['exception_class']} \nOld SQL: {args['sql']}")
         prompt = REFINER_PROMPT.format(
-            input=question, sql=args["sql"], table_info=TABLE_INFO, 
+            input=question, sql=args["sql"], table_info=table_info, 
             mysql_error=args["mysql_error"], exception_class=args["exception_class"])
     raw_sql = llm_generate(prompt, model_name, model, tokenizer)
     sql = preprocess_sql(raw_sql)
     result = execute_sql(sql)
     if result["exception_class"] is not None and num_round < MAX_ROUND:
-        return llm_generate_safe(question, model_name, model, tokenizer, 
+        return llm_generate_safe(question, model_name, model, tokenizer, table_info,
                                  num_round+1, {
                                     "sql": sql,
                                     "mysql_error": result["mysql_error"],
@@ -69,16 +74,25 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_name', type=str, default='chatglm3-6b',
                         choices=["chatglm3-6b", "Baichuan2-13B-Chat", "Qwen-14B-Chat",
-                                 "gpt-3.5-turbo", "gpt-4", "Yi-34B-Chat", "Qwen-74B-Chat"])
+                                 "gpt-3.5-turbo", "gpt-4", "Yi-34B-Chat", "Qwen-72B-Chat"])
     args = parser.parse_args()
     model_name = args.model_name
     model, tokenizer = load_model(model_name)
 
-    df = pd.read_csv('./data/test_data.csv')
-    df = df[["question", "预期sql"]]
+    df = pd.read_csv('./data/question.csv')
     df = df.fillna('')
-    table_info = TABLE_INFO
-    tqdm.pandas()
-    df[f"sql-{model_name}"] = df.progress_apply(lambda x: llm_generate_safe(
-        x["question"], model_name, model, tokenizer), axis=1)
-    df.to_csv(f"./data/test_data-{model_name}.csv", index=False)
+    df[f"sql-{model_name}"] = ""
+    for idx, row in tqdm(df.iterrows(), total=len(df)):
+        table_name = row["table_name"].strip()
+        if table_name == "corporate_relocation":
+            table_info = CORPORATE_RELOCATION_TABLE_INFO
+        elif table_name == "policy_projects":
+            table_info = POLICY_PROJECTS_TABLE_INFO
+        elif table_name == "policy_enterprise":
+            table_info = POLICY_ENTERPRISE_TABLE_INFO
+        else:
+            raise NotImplementedError
+        df[f"sql-{model_name}"][idx] = llm_generate_safe(
+            row["question"], model_name, model, tokenizer, table_info)
+    os.makedirs(f"./data/output", exist_ok=True)
+    df.to_csv(f"./data/output/{model_name}.csv", index=False)

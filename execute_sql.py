@@ -26,11 +26,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_name', type=str, default='chatglm3-6b',
                         choices=["chatglm3-6b", "Baichuan2-13B-Chat", "Qwen-14B-Chat",
-                                 "gpt-3.5-turbo", "gpt-4", "Yi-34B-Chat", "Qwen-74B-Chat"])
+                                 "gpt-3.5-turbo", "gpt-4", "Yi-34B-Chat", "Qwen-72B-Chat"])
     args = parser.parse_args()
     model_name = args.model_name
 
-    sql_df = pd.read_csv(f"./data/test_data-{model_name}.csv")
+    sql_df = pd.read_csv(f"./data/output/{model_name}.csv")
     sql_df["sql-预期执行结果"] = ""
     sql_df[f"sql-{model_name}执行结果"] = ""
     for i in tqdm(range(len(sql_df))):
@@ -44,6 +44,6 @@ if __name__ == "__main__":
         sql_df[f"sql-{model_name}执行结果"][i] = get_sql_execution_result(sql_pred)
         sql_df["sql-预期执行结果"][i] = get_sql_execution_result(row["预期sql"])
     new_sql_df = sql_df[["question", "预期sql", "sql-预期执行结果", f"sql-{model_name}", f"sql-{model_name}执行结果", ]]
-    new_sql_df.to_csv(f"./data/test_data-{model_name}-execution.csv", index=False)
+    new_sql_df.to_csv(f"./data/output/{model_name}-exec.csv", index=False)
 
     # TODO: compare sql execution result

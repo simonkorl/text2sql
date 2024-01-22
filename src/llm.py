@@ -16,7 +16,13 @@ def set_openai_key(model_name):
     openai.api_key_path = ".openai-key-gpt4" if model_name == "gpt-4" else ".openai-key-gpt3.5"
 
 def load_model(model_name):
-    path = f"/root/share/{model_name}"
+    path = None
+    for path_dir in ["/root/share", "/mnt/ssd0/"]:
+        if os.path.exists(os.path.join(path_dir, model_name)):
+            path = os.path.join(path_dir, model_name)
+            break
+    if path is None:
+        raise FileNotFoundError(f"Model {model_name} not found")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if "chatglm" in model_name.lower():
         tokenizer = AutoTokenizer.from_pretrained(
