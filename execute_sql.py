@@ -25,8 +25,9 @@ def get_sql_execution_result(sql):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_name', type=str, default='chatglm3-6b',
-                        choices=["chatglm3-6b", "Baichuan2-13B-Chat", "Qwen-14B-Chat",
-                                 "gpt-3.5-turbo", "gpt-4", "Yi-34B-Chat", "Qwen-72B-Chat"])
+                        choices=["chatglm3-6b", "Baichuan2-13B-Chat", "Qwen-14B-Chat", "sqlcoder-7b-2",
+                                 "gpt-3.5-turbo", "gpt-4", "Yi-34B-Chat", "Qwen-72B-Chat",
+                                  "glm-3.5-turbo", "glm-4"])
     args = parser.parse_args()
     model_name = args.model_name
 

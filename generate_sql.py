@@ -8,7 +8,7 @@ from src.table import (
     POLICY_PROJECTS_TABLE_INFO,
     POLICY_ENTERPRISE_TABLE_INFO
 )
-from src.llm import load_model, llm_generate
+from src.llm import load_model, llm_generate, sqlcoder_generate
 import os
     
 def preprocess_sql(raw_sql):
@@ -57,8 +57,14 @@ def llm_generate_safe(question, model_name, model, tokenizer, table_info, num_ro
             input=question, sql=args["sql"], table_info=table_info, 
             mysql_error=args["mysql_error"], exception_class=args["exception_class"])
     raw_sql = llm_generate(prompt, model_name, model, tokenizer)
+                           
     sql = preprocess_sql(raw_sql)
+
+    if "无法" in sql:
+        return sql
+
     result = execute_sql(sql)
+
     if result["exception_class"] is not None and num_round < MAX_ROUND:
         return llm_generate_safe(question, model_name, model, tokenizer, table_info,
                                  num_round+1, {
@@ -69,12 +75,21 @@ def llm_generate_safe(question, model_name, model, tokenizer, table_info, num_ro
     else:
         return sql # , result["data"]
 
+def sqlcoder_generate_safe(question, _model_name, model, tokenizer, table_info):
+    sql = sqlcoder_generate(model, tokenizer, question, table_info)
+    return sql
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_name', type=str, default='chatglm3-6b',
-                        choices=["chatglm3-6b", "Baichuan2-13B-Chat", "Qwen-14B-Chat",
-                                 "gpt-3.5-turbo", "gpt-4", "Yi-34B-Chat", "Qwen-72B-Chat"])
+                        choices=["chatglm3-6b",
+                                 "Baichuan2-13B-Chat", 
+                                 "Qwen-14B-Chat", "Qwen-72B-Chat",
+                                 "sqlcoder-7b-2",
+                                 "Yi-34B-Chat", 
+                                 "gpt-3.5-turbo", "gpt-4", 
+                                 "glm-3.5-turbo", "glm-4"])
     args = parser.parse_args()
     model_name = args.model_name
     model, tokenizer = load_model(model_name)
@@ -92,7 +107,17 @@ if __name__ == "__main__":
             table_info = POLICY_ENTERPRISE_TABLE_INFO
         else:
             raise NotImplementedError
-        df[f"sql-{model_name}"][idx] = llm_generate_safe(
-            row["question"], model_name, model, tokenizer, table_info)
+
+        result = None
+        if "sqlcoder" in model_name.lower():
+            result = sqlcoder_generate_safe(row["question"], model_name, 
+                                            model, tokenizer, table_info)
+        else:
+            result = llm_generate_safe(row["question"], model_name, 
+                                       model, tokenizer, table_info)
+
+        df[f"sql-{model_name}"][idx] = result
+        # df[f"sql-{model_name}"][idx] = llm_generate_safe(
+            # row["question"], model_name, model, tokenizer, table_info)
     os.makedirs(f"./data/output", exist_ok=True)
     df.to_csv(f"./data/output/{model_name}.csv", index=False)
